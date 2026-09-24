@@ -23,7 +23,15 @@
     --radius: 20px;
   }
 
-  *{ box-sizing: border-box; }
+  *{
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button, .spread-card, .card, .price-option, .back-btn{
+    outline: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
 
   html, body{
     height: 100%;
@@ -421,6 +429,52 @@
     line-height: 1.5;
     padding: 0 10px;
   }
+
+  /* ---------- DEV PANEL ---------- */
+  #dev-toggle{
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+    right: 14px;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: rgba(0,0,0,.45);
+    border: 1px solid var(--line);
+    color: var(--gold-soft);
+    font-size: 16px;
+    z-index: 50;
+    cursor: pointer;
+  }
+  #dev-panel{
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 58px);
+    right: 14px;
+    width: 240px;
+    background: rgba(10,8,18,.92);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    z-index: 50;
+  }
+  .dev-title{
+    font-family: 'Yeseva One', serif;
+    font-size: 14px;
+    color: var(--gold-soft);
+    margin-bottom: 8px;
+  }
+  .dev-row{
+    font-size: 12px;
+    color: var(--ink-dim);
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+  .dev-btn{
+    width: 100%;
+    padding: 9px 10px;
+    font-size: 12.5px;
+    margin-bottom: 8px;
+  }
+  .dev-btn:last-child{ margin-bottom: 0; }
 </style>
 </head>
 <body>
@@ -507,6 +561,16 @@
 </div>
 
 <!-- LOCK / PREMIUM MODAL -->
+<!-- DEV PANEL (виден только вам, см. DEV_USER_IDS в коде) -->
+<button id="dev-toggle" style="display:none;">⚙</button>
+<div id="dev-panel" style="display:none;">
+  <div class="dev-title">Режим разработчика</div>
+  <div class="dev-row" id="dev-status">—</div>
+  <button class="btn btn-ghost dev-btn" id="dev-reset-limits">Сбросить дневные лимиты</button>
+  <button class="btn btn-ghost dev-btn" id="dev-toggle-premium">Включить премиум (тест)</button>
+  <button class="btn btn-ghost dev-btn" id="dev-clear-all">Очистить все данные</button>
+</div>
+
 <div class="overlay" id="overlay-lock">
   <div class="sheet">
     <span class="glyph">✦</span>
@@ -533,7 +597,11 @@
 
   // Адрес вашего бота на PythonAnywhere — сюда мини-апп обращается за
   // ссылкой на счёт при оплате. Впишите свой логин.
-  var BACKEND_URL = "https://opt1mud.pythonanywhere.com";
+  var BACKEND_URL = "https://ваш-логин.pythonanywhere.com";
+
+  // Ваш Telegram ID (числовой, узнать через @userinfobot) — если он совпадёт,
+  // на экране появится значок ⚙ с панелью для тестирования.
+  var DEV_USER_IDS = [443624419]; // замените 0 на свой реальный числовой ID
 
   // ---------- Telegram WebApp init ----------
   var tg = window.Telegram ? window.Telegram.WebApp : null;
@@ -1050,6 +1118,60 @@
       dot.style.animationDelay = delay + 's';
       layer.appendChild(dot);
     }
+  })();
+
+  // ---------- Dev panel (виден только вам) ----------
+  (function initDevPanel(){
+    var myId = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || null;
+    var isDev = insideTelegram && myId && DEV_USER_IDS.indexOf(myId) !== -1;
+    if (!isDev) return;
+
+    var toggleBtn = document.getElementById('dev-toggle');
+    var panel = document.getElementById('dev-panel');
+    toggleBtn.style.display = 'flex';
+    toggleBtn.style.alignItems = 'center';
+    toggleBtn.style.justifyContent = 'center';
+
+    function updateDevStatus(){
+      var lines = ['Ваш ID: ' + myId];
+      lines.push(isPremium() ? 'Премиум: включён' : 'Премиум: выключен');
+      lines.push('Карта дня: ' + (usedFreeToday() ? 'использована' : 'доступна'));
+      lines.push('Да/нет: ' + yesNoRemaining() + ' из ' + YESNO_FREE_LIMIT);
+      document.getElementById('dev-status').innerHTML = lines.join('<br>');
+
+      document.getElementById('dev-toggle-premium').textContent =
+        isPremium() ? 'Выключить премиум' : 'Включить премиум (тест)';
+    }
+
+    toggleBtn.addEventListener('click', function(){
+      var visible = panel.style.display === 'block';
+      panel.style.display = visible ? 'none' : 'block';
+      if (!visible) updateDevStatus();
+    });
+
+    document.getElementById('dev-reset-limits').addEventListener('click', function(){
+      localStorage.removeItem(FREE_DAY_KEY);
+      localStorage.removeItem(YESNO_KEY);
+      refreshHomeTags();
+      updateDevStatus();
+    });
+
+    document.getElementById('dev-toggle-premium').addEventListener('click', function(){
+      if (isPremium()) {
+        localStorage.removeItem(PREMIUM_KEY);
+      } else {
+        var farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+        localStorage.setItem(PREMIUM_KEY, farFuture.toISOString());
+      }
+      refreshHomeTags();
+      updateDevStatus();
+    });
+
+    document.getElementById('dev-clear-all').addEventListener('click', function(){
+      localStorage.clear();
+      refreshHomeTags();
+      updateDevStatus();
+    });
   })();
 
   refreshHomeTags();
