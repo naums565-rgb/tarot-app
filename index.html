@@ -36,7 +36,7 @@
     color: var(--ink);
     font-family: 'Manrope', sans-serif;
     min-height: 100vh;
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: 0;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     overflow-x: hidden;
   }
@@ -80,7 +80,10 @@
     z-index: 1;
     max-width: 480px;
     margin: 0 auto;
-    padding: 28px 20px 40px;
+    /* Доп. отступ сверху — освобождает место под собственную панель Telegram
+       (кнопка "Закрыть", стрелка разворачивания), которая рисуется поверх
+       страницы и не входит в safe-area-inset самой ОС. */
+    padding: calc(env(safe-area-inset-top, 0px) + 56px) 20px 40px;
     min-height: 100vh;
     display: none;
   }
@@ -528,6 +531,10 @@
 (function(){
   "use strict";
 
+  // Адрес вашего бота на PythonAnywhere — сюда мини-апп обращается за
+  // ссылкой на счёт при оплате. Впишите свой логин.
+  var BACKEND_URL = "https://opt1mud.pythonanywhere.com";
+
   // ---------- Telegram WebApp init ----------
   var tg = window.Telegram ? window.Telegram.WebApp : null;
   var insideTelegram = !!(tg && tg.initData);
@@ -659,6 +666,19 @@
     var until = localStorage.getItem(PREMIUM_KEY);
     if (!until) return false;
     return new Date(until).getTime() > Date.now();
+  }
+
+  function grantPremiumLocally(plan){
+    var days = plan === 'year' ? 365 : 30;
+    var now = Date.now();
+    var base = now;
+    var current = localStorage.getItem(PREMIUM_KEY);
+    if (current) {
+      var currentTime = new Date(current).getTime();
+      if (currentTime > now) base = currentTime; // продлеваем поверх текущей подписки
+    }
+    var newUntil = new Date(base + days * 24 * 60 * 60 * 1000);
+    localStorage.setItem(PREMIUM_KEY, newUntil.toISOString());
   }
 
   function usedFreeToday(){
@@ -964,18 +984,46 @@
       alert('Оплата доступна только внутри Telegram. Откройте приложение через бота.');
       return;
     }
-    // Sends a request to the bot backend. The bot (see bot.py) receives this
-    // as a web_app_data message and creates a real Telegram Stars invoice.
-    tg.sendData(JSON.stringify({
-      action: 'buy_premium',
-      plan: selectedPlan.plan,
-      stars: selectedPlan.stars
-    }));
-    // In production, premium status should be confirmed by the backend
-    // after a successful payment (e.g. via a small status-check API call),
-    // not granted directly on the client. This local flag is only a
-    // convenience for demoing the UI before that backend piece exists.
-    closeLock();
+
+    var buyBtn = document.getElementById('btn-buy');
+    var originalText = buyBtn.textContent;
+    buyBtn.textContent = 'Загрузка...';
+    buyBtn.disabled = true;
+
+    var userId = (tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || 0;
+    var url = BACKEND_URL + '/create_invoice?plan=' + encodeURIComponent(selectedPlan.plan) +
+              '&stars=' + encodeURIComponent(selectedPlan.stars) +
+              '&user_id=' + encodeURIComponent(userId);
+
+    fetch(url)
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        buyBtn.textContent = originalText;
+        buyBtn.disabled = false;
+
+        if (!data.ok) {
+          alert('Не удалось создать счёт. Попробуйте ещё раз чуть позже.');
+          return;
+        }
+
+        // openInvoice открывает окно оплаты Stars прямо поверх мини-аппа,
+        // не закрывая его — в отличие от sendData.
+        tg.openInvoice(data.link, function(status){
+          if (status === 'paid') {
+            grantPremiumLocally(selectedPlan.plan);
+            closeLock();
+            refreshHomeTags();
+            haptic('medium');
+          }
+          // 'cancelled' / 'failed' — просто ничего не делаем, пользователь
+          // остаётся на том же экране и может попробовать снова.
+        });
+      })
+      .catch(function(){
+        buyBtn.textContent = originalText;
+        buyBtn.disabled = false;
+        alert('Не удалось связаться с сервером. Проверьте подключение и попробуйте снова.');
+      });
   });
 
   // ---------- Init ----------
