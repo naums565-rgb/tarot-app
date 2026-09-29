@@ -7,7 +7,7 @@
 
   // Ваш Telegram ID (числовой, узнать через @userinfobot) — если он совпадёт,
   // на экране появится значок ⚙ с панелью для тестирования.
-  var DEV_USER_IDS = [0]; // замените 0 на свой реальный числовой ID
+  var DEV_USER_IDS = [443624419]; // замените 0 на свой реальный числовой ID
 
   // ---------- Telegram WebApp init ----------
   var tg = window.Telegram ? window.Telegram.WebApp : null;
