@@ -429,8 +429,7 @@
   }
 
   function invertYesNo(yn){
-    var map = { 'да':'скорее нет', 'скорее да':'скорее нет', 'нет':'скорее да', 'скорее нет':'скорее да' };
-    return map[yn] || yn;
+    var map = { 'да':'нет', 'скорее да':'скорее нет', 'нет':'да', 'скорее нет':'скорее да' };
   }
   function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
 
